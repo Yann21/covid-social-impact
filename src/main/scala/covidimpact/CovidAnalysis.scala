@@ -1,0 +1,5 @@
+package covidimpact
+
+class CovidAnalysis {
+
+}

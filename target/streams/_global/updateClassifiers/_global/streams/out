@@ -1,0 +1,4 @@
+[debug] "not up to date. inChanged = true, force = false
+[debug] Updating ProjectRef(uri("file:/home/yann/Code/Projects/BigDataScala_2020/Covid/"), "root")...
+[debug] Done updating ProjectRef(uri("file:/home/yann/Code/Projects/BigDataScala_2020/Covid/"), "root")
+[warn] There may be incompatibilities among your library dependencies; run 'evicted' to see detailed eviction warnings.
