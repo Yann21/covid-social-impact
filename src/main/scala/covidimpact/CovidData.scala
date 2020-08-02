@@ -4,117 +4,150 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-import scala.collection.immutable.HashMap
 import scala.io.Source
 
 /**
  * Data object to load the data into spark and access
  * it for further processing and analysis.
  *
+ * Available datasets:
+ *  - Waze Mobility
+ *  - Google Mobility
+ *  - JH Confirmed
+ *  - JH Deaths
+ *  - JH Recovered
+ *  - Twitter n-grams
+ *
  * @param spark Handle to spark APIs
  */
-case class TwitterEntry(
-                         date: java.sql.Date,
-                         n: Int,
-                         grams: GramCount
-                       )
-
-case class GramCount (
-                       gram: String,
-                       count: String
-                     )
-class CovidData(spark: SparkSession) {
-  trait DataField {
-    /** Chains the operations and exposes the dataset */
-    def read(): Unit
-    /** Load the files */
-    def load(): Unit
-    /** Droplines FilterByData */
-    def clean(): Unit
-  }
-
+class CovidData(spark: SparkSession, debug: Boolean = false) {
   val pathToRes: String = "src/main/resources/"
   type Country = String
-  type Gram = Seq[String]
-
-//  val tweetsData: Dataset[Twitter.TwitterEntry] = ???
-//  val johnsHopkinsData: Dataset[JohnsHopkins.JHEntry] = ???
-//  val mobilityData: Dataset[Mobility.MobilityEntry] = ???
 
   import spark.implicits._
 
   /**
    * @see https://ref.com
+   *
+   * Using the top 1000 {1-3}grams in tweets.
+   * Time frame: XX/XX/XXXX to XX/XX/XXXX
    */
-  object Twitter extends DataField {
-    val twitterDateFormat = new SimpleDateFormat("yyyy-mm-dd")
-    val schema= Encoders.product[GramCount].schema
+  object Twitter {
+    val tweetsDs: Dataset[TwitterEntry] = load()
 
-    def load(): Unit = {
+    def load(): Dataset[TwitterEntry] = {
+      val schema = Encoders.product[RawTwitterEntry].schema
       val dir: File = new File(pathToRes ++ "covidimpact/core/DailyTweets")
       assert(dir.exists && dir.isDirectory)
-      val listOfFiles: Array[File] = dir.listFiles
+      val listOfFiles: Array[File] =
+        if (debug) dir.listFiles take 5
+        else dir.listFiles
 
-      def includeMetaInformation(file: File): Dataset[TwitterEntry] = {
-        // Filename format: "yyyy-mm-dd_cccssss{n-grams}.csv"
-        //                  "0000-00-00_0123456(7)_____(4)321
-        print("Checkpoint")
-        println(file.getName)
-        val (date: String, string: String) = file.getName.split("_") match {
-          case Array(date, string) => (date, string)
+      /**
+       * File format: "yyyy-mm-dd_cccssss{n-grams}.csv"
+       *              "0000-00-00_0123456(7)_____(4)321"
+       */
+      def extractMetaInfoFromFileName(file: File): (java.sql.Date, Int) = {
+        val (date: java.sql.Date, string: String) = file.getName.split("_") match {
+          case Array(d, string) => (java.sql.Date.valueOf(d), string)
         }
-        print("Checkpoint Other")
-        val nGrams: Int = string.substring(7).dropRight(4) match {
-            case "terms" => 1
-            case "bigrams" => 2
-            case "trigrams" => 3
-          }
+        val nGram: Int = string.substring(7).dropRight(4) match {
+          case "terms" => 1
+          case "bigrams" => 2
+          case "trigrams" => 3
+        }
 
-        val df: DataFrame = spark.read.option("header", "true").schema(schema).csv(file.getPath)
-        val ds: Dataset[GramCount] = df.as[GramCount]
-        val timedDs= ds map( gramCount =>
-          TwitterEntry(java.sql.Date.valueOf(date), nGrams, gramCount) )
-
-        timedDs
+        (date, nGram)
       }
 
+      def parseCSV(file: File): Dataset[TwitterEntry] = {
+        if (debug) print(".")
+        val meta = extractMetaInfoFromFileName(file)
+
+        val ds: Dataset[RawTwitterEntry] =
+          spark.read.option("header", "true").
+          schema(schema).csv(file.getPath).
+          as[RawTwitterEntry]
+
+        val timedDs= ds map(
+          rawEntry => TwitterEntry(
+            meta._1, meta._2,
+            rawEntry.gram.split(" "), rawEntry.counts.getOrElse(0)
+          ))
+
+        timedDs
+        }
+
       @scala.annotation.tailrec
-      def mergeAllDataset(ds: Dataset[TwitterEntry],
-                        files: Array[File]): Dataset[TwitterEntry] =
+      def mergeAll(ds: Dataset[TwitterEntry],
+                          files: Array[File]): Dataset[TwitterEntry] =
         if (files.isEmpty) ds
-        else mergeAllDataset(ds.union(includeMetaInformation(files.head)), files.tail)
+        else mergeAll(ds union parseCSV(files.head), files.tail)
 
-      mergeAllDataset(spark.emptyDataset[TwitterEntry], listOfFiles)
+      println("Loading twitter data.")
+      val merged = mergeAll(spark.emptyDataset[TwitterEntry], listOfFiles)
+      println(s"\n${merged.count.toString} entries\n")
+
+      merged
     }
-    def clean(): Unit = ???
-
-    def read(): Unit = ???
   }
 
-  object JohnsHopkins extends DataField {
-    case class JHEntry(a: String)
 
-    def read(): Unit = ???
+  /**
+   * Using time series for confirmed, deaths and recovered per country.
+   */
+  object JohnsHopkins {
+    val dir: File = new File(pathToRes ++ "covidimpact/core/CSSECovidData/csse_covid_19_time_series")
+    assert(dir.exists && dir.isDirectory)
+    val listOfFiles: Array[File] = Array("/confirmed_global.csv", "/deaths_global.csv", "/recovered_global.csv").
+      map( timeSeries => new File(dir.getPath ++ timeSeries) )
 
-    def load(): Unit = ???
-
-    def clean(): Unit = ???
+    val confirmedDf: DataFrame = spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(0).getPath)
+    val deathsDf:    DataFrame = spark.read.option("inferSchema", "true"). option("header", "true").csv(listOfFiles(1).getPath)
+    val recoveredDf: DataFrame = spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(2).getPath)
   }
 
-  object Mobility extends DataField {
-    case class MobilityEntry(a: String)
 
-    def read(): Unit = ???
+  object Mobility {
+    val dir: File = new File(pathToRes ++ "covidimpact/core/MobilityData")
+    assert(dir.exists && dir.isDirectory)
+    val listOfFiles: Array[File] = Array("/summary_report_regions.csv", "/waze_mobility.csv").
+      map( timeSeries => new File(dir.getPath ++ timeSeries))
 
-    def load(): Unit = ???
+    def typeSummary(df: DataFrame): Dataset[SummaryEntry] = {
+      df map ( row => SummaryEntry(
+        row.getAs[Country]("country"),
+        row.getAs[String]("region"),
+        java.sql.Date.valueOf(row.getAs[String]("date")),
+        row.getAs[Double]("retail and recreation"),
+        row.getAs[Double]("grocery and pharmacy"),
+        row.getAs[Double]("parks"),
+        row.getAs[Double]("transit stations"),
+        row.getAs[Double]("workplaces"),
+        row.getAs[Double]("residential"),
+        row.getAs[Double]("driving"),
+        row.getAs[Double]("transit"),
+        row.getAs[Double]("walking")
+      ))
+    }
+    def typeWaze(df: DataFrame): Dataset[WazeEntry] = {
+      df map (row => WazeEntry(
+        row.getAs[Country]("country"),
+        row.getAs[String]("city"),
+        row.getAs[String]("geo_type"),
+        java.sql.Date.valueOf(row.getAs[String]("date")),
+        row.getAs[Double]("driving_waze")
+      ))
+    }
 
-    def clean(): Unit = ???
+    val summaryDf: Dataset[SummaryEntry] = typeSummary(
+      spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(0).getPath))
+    val wazeDf: Dataset[WazeEntry] = typeWaze(
+      spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(1).getPath))
   }
-
 
 
 
@@ -123,7 +156,7 @@ class CovidData(spark: SparkSession) {
    * data consisting of lookup tables for specific one-time
    * events such as the date of lockdown (if any) by localities.
    */
-  class Additional {
+  object Additional {
     /** @see https://www.kaggle.com/jcyzag/covid19-lockdown-dates-by-country */
     val lookupLockdownDatesLookup: Map[Country, Date] = {
       val it = Source.fromFile(pathToRes ++ "covidimpact/aux/countryLockdowndates.csv").getLines
@@ -149,6 +182,40 @@ class CovidData(spark: SparkSession) {
       countryLockdownDatePairs.toMap
     }
 
+    val englishWords: DataFrame = spark.read.text(pathToRes ++ "covidimpact/aux/en_words.txt")
   }
 
 }
+
+case class SummaryEntry (
+  country:     String,
+  region:      String,
+  date:        java.sql.Date,
+  retail:      Double,
+  grocery:     Double,
+  parks:       Double,
+  stations:    Double,
+  workplaces:  Double,
+  residential: Double,
+  driving:     Double,
+  transit:     Double,
+  walking:     Double
+)
+case class WazeEntry (
+  country:      String,
+  city:         String,
+  geo_type:     String,
+  date:         java.sql.Date,
+  driving_waze: Double
+)
+
+case class TwitterEntry (
+  date:     java.sql.Date,
+  n:        Int,
+  gram:     Seq[String],
+  occ:      Int,
+)
+case class RawTwitterEntry(
+  gram:     String,
+  counts:    Option[Int]
+)

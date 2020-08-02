@@ -1,4 +1,5 @@
-import java.io.File
+def fun(a: String, b: String*) = {
+  println(b)
+}
 
-val d = new File("./Code/Projects/BigDataScala_2020/CovidSocialImpact/src/main/resources/covidimpact/core/DailyTweets")
-print(d.listFiles)
+fun("DFSQ", "aER", "oiu")

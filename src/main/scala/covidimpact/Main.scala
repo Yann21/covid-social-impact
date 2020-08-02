@@ -1,8 +1,8 @@
 package covidimpact
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql._
+import org.apache.spark.sql.{Dataset, SparkSession, Row}
 
 import scala.io.Source
 
@@ -18,8 +18,8 @@ object Main extends App {
   Logger.getLogger("org.apache.spark").setLevel(Level.WARN)
   Logger.getLogger("org.spark-project").setLevel(Level.WARN)
 
-  val data = new CovidData(spark)
-  val tw = data.Twitter.load()
+  val data = new CovidData(spark, debug = true)
+  val processing = new CovidProcessing(spark, data)
 
   spark.close()
 }
