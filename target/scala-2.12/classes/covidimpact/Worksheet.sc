@@ -1,5 +1,5 @@
-def fun(a: String, b: String*) = {
-  println(b)
-}
+val a = Seq(1,2,3,4)
+val b = a.tail
 
-fun("DFSQ", "aER", "oiu")
+val z = a zip b
+z map (a => a._1 + a._2)

@@ -7,6 +7,8 @@ import org.apache.spark.sql.{Dataset, SparkSession, Row}
 import scala.io.Source
 
 object Main extends App {
+  Logger.getLogger("org.apache.spark").setLevel(Level.WARN)
+  Logger.getLogger("org.spark-project").setLevel(Level.WARN)
 
   val spark: SparkSession = SparkSession.
     builder().
@@ -14,9 +16,6 @@ object Main extends App {
 //    config("", "").
     master("local").
     getOrCreate()
-
-  Logger.getLogger("org.apache.spark").setLevel(Level.WARN)
-  Logger.getLogger("org.spark-project").setLevel(Level.WARN)
 
   val data = new CovidData(spark, debug = true)
   val processing = new CovidProcessing(spark, data)

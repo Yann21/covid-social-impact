@@ -47,6 +47,9 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
         else dir.listFiles
 
       /**
+       * Note the inversion of bigrams and trigrams due to the incorrect
+       * original file naming.
+       *
        * File format: "yyyy-mm-dd_cccssss{n-grams}.csv"
        *              "0000-00-00_0123456(7)_____(4)321"
        */
@@ -56,8 +59,8 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
         }
         val nGram: Int = string.substring(7).dropRight(4) match {
           case "terms" => 1
-          case "bigrams" => 2
-          case "trigrams" => 3
+          case "bigrams" => 3
+          case "trigrams" => 2
         }
 
         (date, nGram)
@@ -73,10 +76,16 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
           as[RawTwitterEntry]
 
         val timedDs= ds map(
-          rawEntry => TwitterEntry(
-            meta._1, meta._2,
-            rawEntry.gram.split(" "), rawEntry.counts.getOrElse(0)
-          ))
+          rawEntry => {
+            val (a, b, c) = rawEntry.gram.split(" ") match {
+              case Array(a, b, c) => (a, b, c)
+              case Array(a, b) => (a, b, "")
+              case Array(a) => (a, "", "")
+            }
+            TwitterEntry(
+              meta._1, meta._2, a, b, c, rawEntry.counts.getOrElse(0)
+            )
+          })
 
         timedDs
         }
@@ -89,8 +98,8 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
 
       println("Loading twitter data.")
       val merged = mergeAll(spark.emptyDataset[TwitterEntry], listOfFiles)
-      println(s"\n${merged.count.toString} entries\n")
 
+      println(s"\n${merged.count.toString} twitter entries\n")
       merged
     }
   }
@@ -183,6 +192,7 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
     }
 
     val englishWords: DataFrame = spark.read.text(pathToRes ++ "covidimpact/aux/en_words.txt")
+    val stopWords:    DataFrame = spark.read.text(pathToRes ++ "covidimpact/aux/stopwords.txt")
   }
 
 }
@@ -212,8 +222,10 @@ case class WazeEntry (
 case class TwitterEntry (
   date:     java.sql.Date,
   n:        Int,
-  gram:     Seq[String],
-  occ:      Int,
+  gram1:    String,
+  gram2:    String,
+  gram3:    String,
+  occ:      Int
 )
 case class RawTwitterEntry(
   gram:     String,
