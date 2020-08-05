@@ -3,24 +3,18 @@ package covidimpact
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import org.apache.log4j.Logger
 import org.apache.spark.ml.feature.{Normalizer, VectorAssembler}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.types.{DateType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 /**
  * TODO:
- *  - Clip dates
- *  - Aggregate by country
- *  - Remove missing values if any
- *  _
- *    ° Mobility
- *  - Normalize waze value
- *  _
  *    ° Twitter Data
  *  - Cloud association with covid
  *
+ *  200,000 words
  *  138 countries
  *  300000 twitter entries
  *  Featurization
@@ -28,25 +22,12 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 class CovidProcessing(spark: SparkSession, data: CovidData) {
   import spark.implicits._
 
-  val coronabc: DataFrame = spark.sparkContext.
-    parallelize(Seq("covid", "covid19", "coronavirus", "virus", "pandemic", "covid_19", "corona")).toDF
-
-  //  def lockdowndata: Map[data.Country, Date] = data.Additional.lookupLockdownDatesLookup
-  def tweets: Dataset[TwitterEntry] = data.Twitter.tweetsDs
-  def _englishWords: DataFrame      = data.Additional.englishWords
-  def stopWords:    DataFrame       = data.Additional.stopWords
-
-
-  val englishWords: DataFrame = _englishWords union coronabc
-
-  def joinAll(tweets: Dataset[CovidSignal], google: DataFrame, waze: DataFrame,
-              confirmed: DataFrame, recovered: DataFrame, deaths: DataFrame
-             ): DataFrame = {
-    tweets join google join waze join confirmed join recovered join deaths
-  }
-  joinAll(covidTwitterSignal, google, waze, confirmed, recovered, deaths)
-
-
+  /** Object I: Johns Hopkins Data Processing
+   *  Tangible information and primary predictive feature.
+   *
+   *  - Aggregating over countries
+   *  - Transposing DataFrame so there are only 2 columns (date, figure)
+   */
 
   /**
    * 1. DataFrame: Remove metadata keep `Schema`
@@ -58,7 +39,7 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
    * @param johnsHopkins
    * @return Summing over all contries
    */
-  def sumRowsOverAllCountries(johnsHopkins: DataFrame): DataFrame = {
+  def dailySumRowsOverAllCountries(johnsHopkins: DataFrame): DataFrame = {
     val timeSeries: DataFrame = johnsHopkins.drop("Province/State", "Country/Region", "Lat", "Long")
     val summedRow: Row = timeSeries.rdd.
       reduce((r1, r2) =>
@@ -73,7 +54,7 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
   }
 
   /**
-   * Dirty hack. Move along...
+   * Dirty transposition hack. Move along...
    * @param df
    * @return
    */
@@ -88,47 +69,53 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
       StructField("value", IntegerType, nullable = false)
     ))
 
-    val myRows: Seq[Row] = datesAndFigures.map(pair => Row.fromSeq(Seq(new Date(new SimpleDateFormat("dd/mm/yy").parse(pair._1).getTime),
+    val myRows: Seq[Row] = datesAndFigures.map(pair => Row.fromSeq(Seq(new Date(new SimpleDateFormat("MM/dd/yy").parse(pair._1).getTime),
                                                                        pair._2.asInstanceOf[Int])))
     val myRDD: RDD[Row] = spark.sparkContext.parallelize(myRows)
     spark.createDataFrame(myRDD, pairSchema)
   }
 
-  val confirmed: DataFrame          = data.JohnsHopkins.confirmedDf.cache()
-  val recovered: DataFrame          = data.JohnsHopkins.recoveredDf.cache()
-  val deaths:    DataFrame          = data.JohnsHopkins.deathsDf.cache()
+  private val confirmed: DataFrame          = data.JohnsHopkins.confirmedDf.cache()
+  private val recovered: DataFrame          = data.JohnsHopkins.recoveredDf.cache()
+  private val deaths:    DataFrame          = data.JohnsHopkins.deathsDf.cache()
 
-  def colConfirmed = (transposeDF _ compose sumRowsOverAllCountries)(confirmed)
-  def colrecovered = (transposeDF _ compose sumRowsOverAllCountries)(recovered)
-  def coldeaths    = (transposeDF _ compose sumRowsOverAllCountries)(deaths)
+  private def colConfirmed = (transposeDF _ compose dailySumRowsOverAllCountries)(confirmed).
+    withColumnRenamed("value", "confirmed")
+  private def colRecovered = (transposeDF _ compose dailySumRowsOverAllCountries)(recovered).withColumnRenamed(
+    "value", "recovered")
+  private def colDeaths    = (transposeDF _ compose dailySumRowsOverAllCountries)(deaths).withColumnRenamed(
+    "value", "deaths")
 
 
-
+  /** Object II: Mobility data from Google and Ways
+   * - Averaging response of all countries (Ways and Google)
+   * - Reformatting google data
+   */
 
   def averageDailyWazeMobility(waze: Dataset[WazeEntry]): DataFrame =
-    waze.groupBy("date").avg("driving_waze").as("waze")
+    waze.groupBy("date").avg("driving_waze").withColumnRenamed("avg(driving_waze)", "waze")
 
   def averageDailyGoogleMobility(google: Dataset[SummaryEntry]): DataFrame = {
     google.groupBy($"date").agg(Map(
-      "retail" -> "avg",
-      "grocery" -> "avg",
-      "parks" -> "avg",
+      "retail"   -> "avg",
+      "grocery"  -> "avg",
+      "parks"    -> "avg",
       "stations" -> "avg",
       "workplaces" -> "avg",
       "residential" -> "avg",
-      "driving" -> "avg",
-      "transit" -> "avg",
-      "walking" -> "avg"
+      "driving"  -> "avg",
+      "transit"  -> "avg",
+      "walking"  -> "avg"
     )).
-      withColumnRenamed("avg(retail)", "retail").
-      withColumnRenamed("avg(grocery)", "grocery").
-      withColumnRenamed("avg(parks)", "parks").
+      withColumnRenamed("avg(retail)",   "retail").
+      withColumnRenamed("avg(grocery)",  "grocery").
+      withColumnRenamed("avg(parks)",    "parks").
       withColumnRenamed("avg(stations)", "stations").
       withColumnRenamed("avg(workplaces)", "workplaces").
       withColumnRenamed("avg(residential)", "residential").
-      withColumnRenamed("avg(driving)", "driving").
-      withColumnRenamed("avg(transit)", "transit").
-      withColumnRenamed("avg(walking)", "walking")
+      withColumnRenamed("avg(driving)",  "driving").
+      withColumnRenamed("avg(transit)",  "transit").
+      withColumnRenamed("avg(walking)",  "walking")
   }
 
   def assembleGoogle(google: DataFrame): DataFrame = {
@@ -143,15 +130,29 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
       drop("retail", "grocery", "parks", "stations", "workplaces", "residential",
         "driving", "transit", "walking")
 
-    assembled
+//    assembled
+    google
   }
 
-  val googleDS: Dataset[SummaryEntry] = data.Mobility.summaryDf.cache()
-  val wazeDS:   Dataset[WazeEntry]    = data.Mobility.wazeDf.cache()
-  def google: DataFrame = (assembleGoogle _ compose averageDailyGoogleMobility)(googleDS)
-  def waze: DataFrame = averageDailyWazeMobility(wazeDS)
+  private val googleDS: Dataset[SummaryEntry] = data.Mobility.summaryDf.cache()
+  private val wazeDS:   Dataset[WazeEntry]    = data.Mobility.wazeDf.cache()
+
+  private def google: DataFrame = (assembleGoogle _ compose averageDailyGoogleMobility)(googleDS)
+  private def waze: DataFrame = averageDailyWazeMobility(wazeDS)
 
 
+  /** Object III: Twitter data
+   * - Filtering tweets for english words
+   * - Removing stop words
+   * - Creating a proxy signal for the mental awareness of covid by summing up
+   *   all covid-19 mentions
+   * - Keeping most tweeted words per day for further NLP
+   *
+   */
+
+  private val coronabc: DataFrame = spark.sparkContext.
+    parallelize(Seq("covid", "covid19", "coronavirus", "virus", "pandemic", "covid_19", "corona")).toDF
+  private val stopWords: DataFrame = data.Additional.stopWords.cache()
 
   def filterTweets(tweets: Dataset[TwitterEntry]): Dataset[TwitterEntry] = {
     val countTweets = tweets.count
@@ -169,9 +170,9 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
 
     val filterGram = filteredStopWords.filter($"gram1" =!= "gram")
 
-    println(s"Removed ${countTweets - countFilteredEnglish} non english words")
-    println(s"Removed ${countFilteredEnglish - countFilteredStopWords} english stop words")
-    println(s"Remaining entries: $countFilteredStopWords")
+    Logger.getLogger("Report").info(s"Removed ${countTweets - countFilteredEnglish} non english words")
+    Logger.getLogger("Report").info(s"Removed ${countFilteredEnglish - countFilteredStopWords} english stop words")
+    Logger.getLogger("Report").info(s"Remaining entries: $countFilteredStopWords")
     filterGram.orderBy($"occ".desc)
   }
 
@@ -181,12 +182,44 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
       toDF("date", "mentions").as[CovidSignal]
   }
 
-  englishWords.cache()
-  tweets.cache()
-  def covidTwitterSignal: Dataset[CovidSignal] = (covidDailySignal _ compose filterTweets)(tweets)
+  def covidTwitterWords(tweets: Dataset[TwitterEntry]): Dataset[TwitterDay] = {
+    tweets.groupByKey(_.date).mapGroups( // foldLeft
+      (dates, it) => TwitterDay(dates, it.map(_.gram1).toList
+    ))
+  }
+
+  private def englishWords: DataFrame      = (data.Additional.englishWords union coronabc).cache()
+  private val tweets = data.Twitter.tweetsDs.cache()
+  private val filtered: Dataset[TwitterEntry] = filterTweets(tweets).cache()
+
+  private def covidTwitterSignal: Dataset[CovidSignal] = covidDailySignal(filtered)
+  /** NLP Input */
+  def covidTopThousand: Dataset[TwitterDay] = covidTwitterWords(filtered)
+
+
+  /**
+   * Combining Google mobility values, ways numbers, johns hopkins' recovered, deaths and confirmed,
+   * and lastly the twitter hand crafted signal.
+   *
+   * @return masterDF
+   */
+  def joinAll(): DataFrame = {
+    colConfirmed.
+      join(covidTwitterSignal,  Seq("date"), "outer").
+      join(colRecovered,  Seq("date"), "outer").
+      join(colDeaths,  Seq("date"), "outer").
+      join(google,  Seq("date"), "outer").
+      join(waze, Seq("date"), "outer").
+      orderBy($"date")
+  }
 }
 
 case class CovidSignal (
   date: java.sql.Date,
   mentions: Double
+)
+
+case class TwitterDay (
+  date: java.sql.Date,
+  topWords: List[String]
 )

@@ -23,6 +23,21 @@
     <orderEntry type="library" name="sbt: com.fasterxml.jackson.module:jackson-module-paranamer:2.10.0:jar" level="project" />
     <orderEntry type="library" name="sbt: com.fasterxml.jackson.module:jackson-module-scala_2.12:2.10.0:jar" level="project" />
     <orderEntry type="library" name="sbt: com.github.fommil.netlib:core:1.1.2:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:native_ref-java:1.1:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:native_system-java:1.1:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_ref-linux-armhf:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_ref-linux-i686:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_ref-linux-x86_64:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_ref-osx-x86_64:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_ref-win-i686:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_ref-win-x86_64:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_system-linux-armhf:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_system-linux-i686:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_system-linux-x86_64:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_system-osx-x86_64:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_system-win-i686:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil.netlib:netlib-native_system-win-x86_64:1.1:natives:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.github.fommil:jniloader:1.1:jar" level="project" />
     <orderEntry type="library" name="sbt: com.github.luben:zstd-jni:1.4.4-3:jar" level="project" />
     <orderEntry type="library" name="sbt: com.github.spotbugs:spotbugs-annotations:3.1.9:jar" level="project" />
     <orderEntry type="library" name="sbt: com.github.wendykierp:JTransforms:3.1:jar" level="project" />
@@ -38,6 +53,7 @@
     <orderEntry type="library" name="sbt: com.thoughtworks.paranamer:paranamer:2.8:jar" level="project" />
     <orderEntry type="library" name="sbt: com.twitter:chill-java:0.9.5:jar" level="project" />
     <orderEntry type="library" name="sbt: com.twitter:chill_2.12:0.9.5:jar" level="project" />
+    <orderEntry type="library" name="sbt: com.typesafe.scala-logging:scala-logging_2.12:3.9.2:jar" level="project" />
     <orderEntry type="library" name="sbt: com.univocity:univocity-parsers:2.8.3:jar" level="project" />
     <orderEntry type="library" name="sbt: commons-beanutils:commons-beanutils:1.7.0:jar" level="project" />
     <orderEntry type="library" name="sbt: commons-cli:commons-cli:1.2:jar" level="project" />
@@ -207,6 +223,18 @@
         </JAVADOC>
         <SOURCES>
           <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/org/apache/avro/avro-mapred/1.8.2/avro-mapred-1.8.2-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_ref-linux-armhf/1.1/netlib-native_ref-linux-armhf-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_ref-linux-i686/1.1/netlib-native_ref-linux-i686-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_ref-linux-x86_64/1.1/netlib-native_ref-linux-x86_64-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_ref-osx-x86_64/1.1/netlib-native_ref-osx-x86_64-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_ref-win-i686/1.1/netlib-native_ref-win-i686-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_ref-win-x86_64/1.1/netlib-native_ref-win-x86_64-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_system-linux-armhf/1.1/netlib-native_system-linux-armhf-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_system-linux-i686/1.1/netlib-native_system-linux-i686-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_system-linux-x86_64/1.1/netlib-native_system-linux-x86_64-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_system-osx-x86_64/1.1/netlib-native_system-osx-x86_64-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_system-win-i686/1.1/netlib-native_system-win-i686-1.1-sources.jar!/" />
+          <root url="jar://$USER_HOME$/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/fommil/netlib/netlib-native_system-win-x86_64/1.1/netlib-native_system-win-x86_64-1.1-sources.jar!/" />
         </SOURCES>
       </library>
     </orderEntry>

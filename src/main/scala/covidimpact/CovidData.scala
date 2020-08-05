@@ -4,6 +4,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 
+import org.apache.log4j.Logger
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
@@ -23,7 +24,7 @@ import scala.io.Source
  *
  * @param spark Handle to spark APIs
  */
-class CovidData(spark: SparkSession, debug: Boolean = false) {
+class CovidData(spark: SparkSession, DEBUG: Boolean = false) {
   val pathToRes: String = "src/main/resources/"
   type Country = String
 
@@ -33,7 +34,6 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
    * @see https://ref.com
    *
    * Using the top 1000 {1-3}grams in tweets.
-   * Time frame: XX/XX/XXXX to XX/XX/XXXX
    */
   object Twitter {
     val tweetsDs: Dataset[TwitterEntry] = load()
@@ -43,7 +43,7 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
       val dir: File = new File(pathToRes ++ "covidimpact/core/DailyTweets")
       assert(dir.exists && dir.isDirectory)
       val listOfFiles: Array[File] =
-        if (debug) dir.listFiles take 5
+        if (DEBUG) dir.listFiles take 5
         else dir.listFiles
 
       /**
@@ -67,7 +67,7 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
       }
 
       def parseCSV(file: File): Dataset[TwitterEntry] = {
-        if (debug) print(".")
+        if (DEBUG) print(".")
         val meta = extractMetaInfoFromFileName(file)
 
         val ds: Dataset[RawTwitterEntry] =
@@ -95,18 +95,17 @@ class CovidData(spark: SparkSession, debug: Boolean = false) {
                           files: Array[File]): Dataset[TwitterEntry] =
         if (files.isEmpty) ds
         else mergeAll(ds union parseCSV(files.head), files.tail)
-
-      println("Loading twitter data.")
+      Logger.getLogger("Report").debug("Loading twitter data.")
       val merged = mergeAll(spark.emptyDataset[TwitterEntry], listOfFiles)
 
-      println(s"\n${merged.count.toString} twitter entries\n")
+      Logger.getLogger("Report").info(s"${merged.count.toString} twitter entries\n")
       merged
     }
   }
 
 
   /**
-   * Using time series for confirmed, deaths and recovered per country.
+   * Using JH time series for confirmed, deaths and recovered per country.
    */
   object JohnsHopkins {
     val dir: File = new File(pathToRes ++ "covidimpact/core/CSSECovidData/csse_covid_19_time_series")
