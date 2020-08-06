@@ -2,16 +2,11 @@ package covidimpact
 
 import java.io.File
 
-import org.apache.log4j.{ConsoleAppender, FileAppender, Level, LogManager, Logger}
-import org.apache.spark.sql._
+import org.apache.log4j.{ConsoleAppender, Level, Logger}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
-
-import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.types._
-import scala.collection.parallel.ParSeq
-import scala.collection.parallel.mutable.ParArray
-import scala.reflect.ClassTag
+import org.apache.spark.sql.{Dataset, Encoder, Row, SparkSession, _}
+
 import scala.reflect.io.Directory
 
 /**
@@ -22,7 +17,8 @@ object Main extends App {
   /** Runtime parameters */
   val TWEETS_LOCATION = "./save/tweetsds"
   val DF_LOCATION  = "./save/masterdf"
-  val FROM_DISK = true
+  // (T,_): Reloads from disk; (F,F): Reload everything; (F,T): Reload a fraction
+  val FROM_DISK = false
   val DEBUG  = true
   val LOG = "Report"
 
@@ -33,11 +29,11 @@ object Main extends App {
   myLogger.info("Initialize Report logger")
 
   /** Fire up spark */
-  val spark: SparkSession = SparkSession.
-    builder().
+  val spark: SparkSession = SparkSession.builder().
     appName("Covid Impact").
     master("local").
     getOrCreate()
+  myLogger.debug("############## Spark Session online ##############")
 
   import spark.implicits._
 
@@ -59,12 +55,13 @@ object Main extends App {
   }
 
   /** Abstracting the need for checkpointing and retrieving from disk */
-  def retrieveFromDisk[T <: Serializable](location: String, retrieval: () => Dataset[T],
+  def retrieveFromDisk[T <: Serializable](location: String, retrieval: => Dataset[T],
                           encoding: Encoder[T], logMessage: String = ""): Dataset[T] =
     if (FROM_DISK) loadFromDisk[T](location)(encoding)
     else {
-      val ds: Dataset[T] = retrieval()
-      saveToDisk(ds, location); ds
+      val ds: Dataset[T] = Util.time(retrieval)
+      if (!DEBUG) saveToDisk(ds, location)
+      ds
     }
 
   val dfSchema = StructType(Seq(
@@ -76,15 +73,18 @@ object Main extends App {
   ))
 
 
-  val processing = new CovidProcessing(spark, new CovidData(spark, DEBUG = DEBUG))
+  lazy val processing = new CovidProcessing(spark, new CovidData(spark, DEBUG))
 
-  def masterDF: DataFrame = retrieveFromDisk[Row](DF_LOCATION,
-    () => processing.joinAll(), RowEncoder(dfSchema), logMessage = "MasterDF")
+  lazy val masterDF: DataFrame = retrieveFromDisk[Row](DF_LOCATION,
+    processing.joinAll(), RowEncoder(dfSchema), logMessage = "MasterDF")
 
-  def tweetsDS: Dataset[TwitterDay] = retrieveFromDisk[TwitterDay](TWEETS_LOCATION,
-    () => processing.covidTopThousand, newProductEncoder, logMessage = "TweetsDS")
+  lazy val tweetsDS: Dataset[TwitterDay] = retrieveFromDisk[TwitterDay](TWEETS_LOCATION,
+    processing.covidTopThousand, newProductEncoder, logMessage = "TweetsDS")
 
-  val analysis = new CovidAnalysis(masterDF, tweetsDS)
+  masterDF show(5, false)
+  tweetsDS show(5, false)
+
+  new CovidAnalysis(spark).execute(masterDF, tweetsDS)
 
   spark.close()
 }

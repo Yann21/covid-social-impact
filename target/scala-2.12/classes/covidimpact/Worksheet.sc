@@ -1,5 +1,4 @@
-val a = Seq(1,2,3,4)
-val b = a.tail
+case class Hello(s1: String, i1: Int)
 
-val z = a zip b
-z map (a => a._1 + a._2)
+val a = Hello("hi", 1)
+Hello.unapply _

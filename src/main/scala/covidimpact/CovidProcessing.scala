@@ -183,14 +183,16 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
   }
 
   def covidTwitterWords(tweets: Dataset[TwitterEntry]): Dataset[TwitterDay] = {
+    Logger.getLogger("Report").debug("Accumulating unigrams")
     tweets.groupByKey(_.date).mapGroups( // foldLeft
       (dates, it) => TwitterDay(dates, it.map(_.gram1).toList
     ))
   }
 
-  private def englishWords: DataFrame      = (data.Additional.englishWords union coronabc).cache()
-  private val tweets = data.Twitter.tweetsDs.cache()
-  private val filtered: Dataset[TwitterEntry] = filterTweets(tweets).cache()
+  private def englishWords: DataFrame = data.Additional.englishWords union coronabc
+  private val tweets = data.Twitter.tweetsDs
+  private val filtered: Dataset[TwitterEntry] = Util.time( filterTweets(tweets) )
+  englishWords.cache(); tweets.cache(); filtered.cache()
 
   private def covidTwitterSignal: Dataset[CovidSignal] = covidDailySignal(filtered)
   /** NLP Input */
@@ -204,6 +206,7 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
    * @return masterDF
    */
   def joinAll(): DataFrame = {
+    Logger.getLogger("Report").debug("Joining df into masterDF...")
     colConfirmed.
       join(covidTwitterSignal,  Seq("date"), "outer").
       join(colRecovered,  Seq("date"), "outer").

@@ -98,7 +98,7 @@ class CovidData(spark: SparkSession, DEBUG: Boolean = false) {
       Logger.getLogger("Report").debug("Loading twitter data.")
       val merged = mergeAll(spark.emptyDataset[TwitterEntry], listOfFiles)
 
-      Logger.getLogger("Report").info(s"${merged.count.toString} twitter entries\n")
+      Logger.getLogger("Report").info(s"${merged.count.toString} twitter entries")
       merged
     }
   }
