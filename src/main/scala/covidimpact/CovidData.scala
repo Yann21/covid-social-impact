@@ -6,7 +6,6 @@ import java.util.Date
 
 import org.apache.log4j.Logger
 import org.apache.spark.sql._
-import org.apache.spark.sql.types._
 
 import scala.io.Source
 
@@ -108,13 +107,21 @@ class CovidData(spark: SparkSession, DEBUG: Boolean = false) {
    * Using JH time series for confirmed, deaths and recovered per country.
    */
   object JohnsHopkins {
+//    Console.println("Hello")
+//    val d = new File(".")
+//    d.listFiles foreach println
+//    val d2 = new File(pathToRes ++ "covidimpact/core/CSSECovidData/csse_covid_19_time_series/")
+//    d2.listFiles foreach println
+//    println(listOfFiles(0).getPath)
+//    val d3 = new File(listOfFiles(0).getPath)
+//    d3.listFiles foreach println
     val dir: File = new File(pathToRes ++ "covidimpact/core/CSSECovidData/csse_covid_19_time_series")
     assert(dir.exists && dir.isDirectory)
     val listOfFiles: Array[File] = Array("/confirmed_global.csv", "/deaths_global.csv", "/recovered_global.csv").
       map( timeSeries => new File(dir.getPath ++ timeSeries) )
 
     val confirmedDf: DataFrame = spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(0).getPath)
-    val deathsDf:    DataFrame = spark.read.option("inferSchema", "true"). option("header", "true").csv(listOfFiles(1).getPath)
+    val deathsDf:    DataFrame = spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(1).getPath)
     val recoveredDf: DataFrame = spark.read.option("inferSchema", "true").option("header", "true").csv(listOfFiles(2).getPath)
   }
 
@@ -167,7 +174,8 @@ class CovidData(spark: SparkSession, DEBUG: Boolean = false) {
   object Additional {
     /** @see https://www.kaggle.com/jcyzag/covid19-lockdown-dates-by-country */
     val lookupLockdownDatesLookup: Map[Country, Date] = {
-      val it = Source.fromFile(pathToRes ++ "covidimpact/aux/countryLockdowndates.csv").getLines
+      val source = Source.fromFile(pathToRes ++ "covidimpact/aux/countryLockdowndates.csv")
+      val it = source.getLines
       it.next() // Ignore header
       val dateParser = new SimpleDateFormat("dd/mm/yyyy")
 

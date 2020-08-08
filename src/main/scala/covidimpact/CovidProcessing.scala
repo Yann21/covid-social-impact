@@ -1,19 +1,14 @@
 package covidimpact
 
 import java.text.SimpleDateFormat
-import java.util.Date
 
 import org.apache.log4j.Logger
-import org.apache.spark.ml.feature.{Normalizer, VectorAssembler}
+import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.{DateType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DateType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
 /**
- * TODO:
- *    ° Twitter Data
- *  - Cloud association with covid
- *
  *  200,000 words
  *  138 countries
  *  300000 twitter entries
@@ -36,7 +31,7 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
    * 4. RDD: Parallelize Row into RDD
    * 5. DataFrame: Reconstruct DF with previous `Schema`
    *
-   * @param johnsHopkins
+   * @param johnsHopkins DataFrame
    * @return Summing over all contries
    */
   def dailySumRowsOverAllCountries(johnsHopkins: DataFrame): DataFrame = {
@@ -55,7 +50,7 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
 
   /**
    * Dirty transposition hack. Move along...
-   * @param df
+   * @param df DataFrame
    * @return
    */
   def transposeDF(df: DataFrame): DataFrame = {
@@ -130,7 +125,6 @@ class CovidProcessing(spark: SparkSession, data: CovidData) {
       drop("retail", "grocery", "parks", "stations", "workplaces", "residential",
         "driving", "transit", "walking")
 
-//    assembled
     google
   }
 

@@ -3,25 +3,16 @@ package covidimpact
 import java.sql.Date
 
 import org.apache.log4j.Logger
-import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.clustering.LDA
-import org.apache.spark.ml.evaluation.{MulticlassClassificationEvaluator, RegressionEvaluator}
-import org.apache.spark.ml.feature.{CountVectorizer, CountVectorizerModel, FeatureHasher, IndexToString, StringIndexer, Tokenizer, VectorAssembler, VectorIndexer}
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.feature._
+import org.apache.spark.ml.functions.vector_to_array
 import org.apache.spark.ml.linalg.Matrix
-import org.apache.spark.ml.param.Param
-import org.apache.spark.ml.regression.RandomForestRegressor
 import org.apache.spark.ml.stat.Correlation
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 
-/**
- * TODO:
- *  - Cross correlation
- *  - LDA?
- *  - ...
- */
 class CovidAnalysis(spark: SparkSession) {
-
 
   def dataFrameAssembler(data: DataFrame): DataFrame = {
     val assembler = new VectorAssembler().
@@ -50,17 +41,7 @@ class CovidAnalysis(spark: SparkSession) {
   }
 
 
-
-  /**
-   *
-   * TODO:
-   *   HPC Production
-   *   Report
-   *   Stop
-   *
-   */
-
-    import spark.implicits._
+  import spark.implicits._
 
   def tokenizer(dataset: Dataset[TwitterDay]): DataFrame = {
     Logger.getLogger("Report").debug("Tokenizing tweets...")
@@ -85,7 +66,7 @@ class CovidAnalysis(spark: SparkSession) {
   }
 
   // Hyperparameters
-  val k = 10
+  val kTopics = 10
   val iter = 10
 
   /**
@@ -95,47 +76,64 @@ class CovidAnalysis(spark: SparkSession) {
    */
   def lda(dataset: DataFrame): DataFrame = {
     Logger.getLogger("Report").debug("LDA Clustering...")
-    val lda = new LDA().setK(k).setMaxIter(iter)
+    val lda = new LDA().setK(kTopics).setMaxIter(iter)
     val model = lda.fit(dataset)
 
     val ll = model.logLikelihood(dataset)
     val lp = model.logPerplexity(dataset)
 
-    val topics = model.describeTopics(3)
+    val topics = model.describeTopics(4)
+    println("Topic description")
+    topics show (5, false)
 
     val transformed = model.transform(dataset).select("_1", "topicDistribution")
     transformed
   }
 
 
-  def combine(df1: DataFrame, df2: DataFrame): DataFrame = {
+  def rfAssembler(df1: DataFrame, df2: DataFrame, includeJH: Boolean = true): DataFrame = {
+    val topics = df2.withColumn("xs", vector_to_array($"topicDistribution")).
+      select($"_1", $"xs"(0).as("lda_0"), $"xs"(1).as("lda_1"),
+        $"xs"(2).as("lda_2"), $"xs"(3).as("lda_3"),
+        $"xs"(4).as("lda_4"), $"xs"(5).as("lda_5"),
+        $"xs"(6).as("lda_6"), $"xs"(7).as("lda_7"),
+        $"xs"(8).as("lda_8"), $"xs"(9).as("lda_9"))
+
+    val both: DataFrame = df1.join(topics, df1("date") === topics("_1"), "inner")
+
     val indexer = new StringIndexer().
       setInputCol("confirmed").
       setOutputCol("label")
 
-    val featureCols = Array("deaths", "mentions") //, "recovered", "deaths", "workplaces", "transit", "walking", "residential", "parks", "grocery", "driving", "stations", "retail", "waze")
+    val featureCols =
+      if (includeJH) Array("deaths", "mentions", "recovered", "deaths", "workplaces", "transit", "walking",
+        "residential", "parks", "grocery", "driving", "stations", "retail", "waze",
+        "lda_0", "lda_1", "lda_2", "lda_3", "lda_4", "lda_5", "lda_6", "lda_7", "lda_8", "lda_9")
+      else Array("deaths", "mentions", "workplaces", "transit", "walking",
+        "residential", "parks", "grocery", "driving", "stations", "retail", "waze",
+        "lda_0", "lda_1", "lda_2", "lda_3", "lda_4", "lda_5", "lda_6", "lda_7", "lda_8", "lda_9")
     val assembler = new VectorAssembler().
       setInputCols(featureCols).
       setOutputCol("features")
     assembler.setHandleInvalid("skip")
 
-    val featureDF = assembler.transform(df)
-    val labelDF = indexer.fit(featureDF).transform(featureDF)
-    labelDF
+    val featureDF = assembler.transform(both)
+    val labeledDF = indexer.fit(featureDF).transform(featureDF)
+    labeledDF
   }
 
+  val rfTreeNb = 10
   def randomForest(df: DataFrame): RandomForestClassificationModel =  {
     Logger.getLogger("Report").debug("Random foresting...")
 
     val Array(trainingData, testData) = df.randomSplit(Array(0.7, 0.3))
 
     val rf = new RandomForestClassifier().
-      setNumTrees(10)
+      setNumTrees(rfTreeNb)
 
     val model = rf.fit(trainingData)
     val predictions = model.transform(testData)
-    predictions show(5, false)
-
+    println(model.toDebugString)
 
     val evaluator = new RegressionEvaluator().
       setLabelCol("label").
@@ -143,8 +141,7 @@ class CovidAnalysis(spark: SparkSession) {
       setMetricName("rmse")
 
     val rmse = evaluator.evaluate(predictions)
-    print("Model RMSE: ")
-    println(rmse)
+    print("Model RMSE: "); println(rmse)
 
     model
   }
@@ -153,18 +150,19 @@ class CovidAnalysis(spark: SparkSession) {
 
 
   def execute(masterDF: DataFrame, tweetsDS: Dataset[TwitterDay]): Unit = {
+    val assembled = dataFrameAssembler(masterDF)
+    val matrix = correlationStatistic(assembled, spearman = false)
+    println(matrix)
+
     val tokens = tokenizer(tweetsDS)
     val vectors = Util.time(countVectorizer(tokens))
     val topics = Util.time(lda(vectors))
 
 
-//    val input = combineForRandomForest(masterDF, results)
-    val rfInput: DataFrame = combine(masterDF, topics)
-    val b = randomForest(a)
+    val rfInputBiased: DataFrame = rfAssembler(masterDF, topics, includeJH = true)
+    val rfInputUnbiased: DataFrame = rfAssembler(masterDF, topics, includeJH = false)
 
-
-//      val assembled = dataFrameAssembler(data)
-//      val matrix = correlationStatistic(assembled, spearman = false)
-//      println(matrix)
+    val rfModelB  = Util.time( randomForest(rfInputBiased) )
+    val rfModelUB = Util.time( randomForest(rfInputUnbiased) )
   }
 }

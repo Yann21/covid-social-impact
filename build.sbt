@@ -18,3 +18,8 @@ lazy val root = project
 
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-a", "-v", "-s")
 )
+
+assemblyMergeStrategy in assembly := {
+  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case x => MergeStrategy.first
+}
